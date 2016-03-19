@@ -28,6 +28,8 @@ pub extern "C" fn init() {
     Console::get().setup();
 }
 
+pub static mut hasSword : bool = true;
+
 #[no_mangle]
 #[inline(never)]
 pub extern "C" fn game_loop() {
@@ -46,16 +48,21 @@ pub extern "C" fn game_loop() {
     }
     else if exit.entrance.stage_name() == stage::sea::SEA && exit.entrance.room == 44 //game over or save warp
     {
-        let _ = write!(lines[0].begin(), "you tried... :^)");
+        let _ = write!(lines[0].begin(), "you tried :^)");
         let warp = Warp::new(stage::dev::LARGE_EMPTY_ROOM, 0, 0, exit.layer_override, exit.fadeout, true);
         warp.execute();
     }
     else if Entrance::last_entrance().stage_name() == stage::earth_temple::TEMPLE && exit.entrance.room == Entrance::last_entrance().room
     {
+        if unsafe {hasSword}
+        {
+            let _ = write!(lines[0].begin(), "- Backwards is Forwards -");
+        }
         flag::HAS_SEEN_INTRO.activate();
-        let _ = write!(lines[0].begin(), "Puzzle 1: Backwards is Forwards");
         if Link::room() == 0 && exit.entrance.room == Entrance::last_entrance().room
         {
+            unsafe {hasSword = false;}
+            let _ = write!(lines[0].begin(), "- Do Not Pass Go, Do Not Collect $200 -");
             system::memory::write(0x803B81BC, 0x00000000); //hero's sword off
             let warp = Warp::new(stage::earth_temple::TEMPLE, 1, 1, exit.layer_override, exit.fadeout, true);
             warp.execute();
@@ -70,21 +77,44 @@ pub extern "C" fn game_loop() {
     {
         if !flag::GRABBED_FIRST_ROPE_IN_FF1.is_active()
         {
-            let _ = write!(lines[0].begin(), "Puzzle 2: On the Ropes Without That Button");
+            let _ = write!(lines[0].begin(), "- On the Ropes Without That Button -");
+            link.heart_quarters = 12;
             Link::set_collision(link::CollisionType::DoorCancel);
         }
         else
         {
-            let _ = write!(lines[0].begin(), "Puzzle 3: No Pain, No Gain");
             if link.heart_quarters < 12
             {
+                let _ = write!(lines[0].begin(), "- Fuck Doors, Get Paid -");
                 Link::set_collision(link::CollisionType::ChestStorage);
             }
             else
             {
+                let _ = write!(lines[0].begin(), "- No Pain, No Gain -");
                 Link::set_collision(link::CollisionType::Default);
             }
         }
+    }
+    else if Entrance::last_entrance().stage_name() == stage::forbidden_woods::BOSS
+    {
+        let _ = write!(lines[0].begin(), "- Unconventional Methods -");
+        Link::set_collision(link::CollisionType::ChestStorage);
+        inventory.deku_leaf_slot = item::DEKU_LEAF;
+        link.magic = 16;
+        link.max_magic = 16;
+        link.sword_id = item::UNCHARGED_MASTER_SWORD;
+        system::memory::write(0x803B81BC, 0x02000000); //master sword
+    }
+    else if Entrance::last_entrance().stage_name() == stage::outset::UNDER_LINKS_HOUSE
+    {
+        let _ = write!(lines[0].begin(), "- 45 Explosives -");
+        system::memory::write(0x803B81BC, 0x00000000); //no sword
+        inventory.deku_leaf_slot = item::EMPTY;
+        link.sword_id = item::EMPTY;
+        link.magic = 0;
+        link.max_magic = 0;
+        inventory.bombs_slot = item::BOMBS;
+        inventory.tingle_tuner_slot = item::TINGLE_TUNER;
     }
     else 
     {
@@ -94,10 +124,41 @@ pub extern "C" fn game_loop() {
 
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn set_controller() {
+pub extern "C" fn set_control_stuff() {
+    //modify controller inputs
     if Entrance::last_entrance().stage_name() == stage::forsaken_fortress::FF1_INTERIOR
     {
         controller::mask_all_buttons(!controller::A);
+    }
+    //replace warps
+    let exit = Warp::last_exit();
+    if exit.entrance.stage_name() == stage::forsaken_fortress::FF1
+    {
+        let warp = Warp::new(stage::forbidden_woods::BOSS, 0, 0, exit.layer_override, exit.fadeout, true);
+        warp.execute();
+    }
+    else if exit.entrance.stage_name() == stage::forest_haven::FOREST_HAVEN
+    {
+        system::memory::write(0x803b8175, 0x00000063); //carry 99 bombs
+        system::memory::write(0x803b816F, 0x00000032); //have 50 bombs
+        let warp = Warp::new(stage::outset::UNDER_LINKS_HOUSE, 0, 0, exit.layer_override, exit.fadeout, true);
+        warp.execute();
+    }
+    else if exit.entrance.stage_name() == stage::sea::SEA && Entrance::last_entrance().stage_name() == stage::outset::UNDER_LINKS_HOUSE
+    {
+        let bomb_count : u8 = system::memory::read(0x803b8172);
+        if bomb_count == 45
+        {
+            //next puzzle... somewhere
+            let warp = Warp::new(stage::dev::BASIC_ISLAND, 0, 0, exit.layer_override, exit.fadeout, true);
+            warp.execute();
+        }
+        else 
+        {
+            system::memory::write(0x803b816F, 0x00000032); //have 50 bombs
+            let warp = Warp::new(stage::outset::UNDER_LINKS_HOUSE, 0, 0, exit.layer_override, exit.fadeout, true);
+            warp.execute();
+        }
     }
 }
 
@@ -105,5 +166,5 @@ pub extern "C" fn set_controller() {
 pub extern "C" fn start() {
     game_loop();
     init();
-    set_controller();
+    set_control_stuff();
 }
