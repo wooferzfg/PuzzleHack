@@ -5,19 +5,12 @@
 extern crate libtww;
 
 use libtww::prelude::*;
-use libtww::system;
-use libtww::link;
-use libtww::Link;
+use libtww::{system, link, Link};
 use libtww::link::inventory::Inventory;
 use libtww::link::item;
-use libtww::game::Console;
-use libtww::game::controller;
-use libtww::game::flag;
-use libtww::warping::Entrance;
-use libtww::warping::Warp;
-use libtww::warping::stage;
-use libtww::warping::warp;
-use libtww::warping::fadeout::FadeOut;
+use libtww::link::quest_items::Sword;
+use libtww::game::{Console, controller, flag};
+use libtww::warping::{Entrance, Warp, stage};
 
 #[no_mangle]
 #[inline(never)]
@@ -42,7 +35,7 @@ pub extern "C" fn game_loop() {
 
     if exit.entrance.stage_name() == stage::sea::SEA && Entrance::last_entrance().stage_name() == stage::other::NAME_SELECT && !flag::HAS_SEEN_INTRO.is_active()
     {
-        system::memory::write(0x803B81BC, 0x01000000); //hero's sword
+        link.set_sword(Sword::HerosSword);
         let warp = Warp::new(stage::earth_temple::TEMPLE, 1, 1, exit.layer_override, exit.fadeout, exit.enabled);
         warp.execute();
     }
@@ -62,8 +55,8 @@ pub extern "C" fn game_loop() {
         if Link::room() == 0 && exit.entrance.room == Entrance::last_entrance().room
         {
             unsafe {hasSword = false;}
-            let _ = write!(lines[0].begin(), "- Do Not Pass Go, Do Not Collect $200 -");
-            system::memory::write(0x803B81BC, 0x00000000); //hero's sword off
+            let _ = write!(lines[0].begin(), "- Do Not Pass Go, Do Not Collect 200 Rupees -");
+            link.set_sword(Sword::None);
             let warp = Warp::new(stage::earth_temple::TEMPLE, 1, 1, exit.layer_override, exit.fadeout, true);
             warp.execute();
         }
@@ -102,15 +95,13 @@ pub extern "C" fn game_loop() {
         inventory.deku_leaf_slot = item::DEKU_LEAF;
         link.magic = 16;
         link.max_magic = 16;
-        link.sword_id = item::UNCHARGED_MASTER_SWORD;
-        system::memory::write(0x803B81BC, 0x02000000); //master sword
+        link.set_sword(Sword::UnchargedMasterSword);
     }
     else if Entrance::last_entrance().stage_name() == stage::outset::UNDER_LINKS_HOUSE
     {
-        let _ = write!(lines[0].begin(), "- 45 Explosives -");
-        system::memory::write(0x803B81BC, 0x00000000); //no sword
+        let _ = write!(lines[0].begin(), "- Bombs = The Answer to Life -");
+        link.set_sword(Sword::None);
         inventory.deku_leaf_slot = item::EMPTY;
-        link.sword_id = item::EMPTY;
         link.magic = 0;
         link.max_magic = 0;
         inventory.bombs_slot = item::BOMBS;
@@ -122,32 +113,46 @@ pub extern "C" fn game_loop() {
     }
 }
 
+pub fn mask_all_buttons(mask: u16) {
+    use libtww::system::memory::{read, write};
+
+    let m1: u16 = read(0x803E0D2A);
+    let m2: u16 = read(0x803E0D2E);
+    let m3: u16 = read(0x803E0CF8);
+    let m4: u16 = read(0x803E0D42);
+
+    write(0x803E0D2A, m1 & mask);
+    write(0x803E0D2E, m2 & mask);
+    write(0x803E0CF8, m3 & mask);
+    write(0x803E0D42, m4 & mask);
+}
+
 #[no_mangle]
 #[inline(never)]
 pub extern "C" fn set_control_stuff() {
     //modify controller inputs
     if Entrance::last_entrance().stage_name() == stage::forsaken_fortress::FF1_INTERIOR
     {
-        controller::mask_all_buttons(!controller::A);
+        mask_all_buttons(!controller::A);
     }
     //replace warps
+    let inventory = Inventory::get();
     let exit = Warp::last_exit();
     if exit.entrance.stage_name() == stage::forsaken_fortress::FF1
     {
         let warp = Warp::new(stage::forbidden_woods::BOSS, 0, 0, exit.layer_override, exit.fadeout, true);
         warp.execute();
     }
-    else if exit.entrance.stage_name() == stage::forest_haven::FOREST_HAVEN
+    else if exit.entrance.stage_name() == stage::forest_haven::FOREST_HAVEN || exit.entrance.stage_name() == stage::forsaken_fortress::FF1_INTERIOR
     {
-        system::memory::write(0x803b8175, 0x00000063); //carry 99 bombs
-        system::memory::write(0x803b816F, 0x00000032); //have 50 bombs
+        inventory.bomb_count = 45;
+        inventory.bomb_capacity = 99;
         let warp = Warp::new(stage::outset::UNDER_LINKS_HOUSE, 0, 0, exit.layer_override, exit.fadeout, true);
         warp.execute();
     }
     else if exit.entrance.stage_name() == stage::sea::SEA && Entrance::last_entrance().stage_name() == stage::outset::UNDER_LINKS_HOUSE
     {
-        let bomb_count : u8 = system::memory::read(0x803b8172);
-        if bomb_count == 45
+        if inventory.bomb_count == 42
         {
             //next puzzle... somewhere
             let warp = Warp::new(stage::dev::BASIC_ISLAND, 0, 0, exit.layer_override, exit.fadeout, true);
@@ -155,7 +160,7 @@ pub extern "C" fn set_control_stuff() {
         }
         else 
         {
-            system::memory::write(0x803b816F, 0x00000032); //have 50 bombs
+            inventory.bomb_count = 45;
             let warp = Warp::new(stage::outset::UNDER_LINKS_HOUSE, 0, 0, exit.layer_override, exit.fadeout, true);
             warp.execute();
         }
