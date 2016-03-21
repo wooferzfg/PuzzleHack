@@ -5,13 +5,15 @@
 extern crate libtww;
 
 use libtww::prelude::*;
-use libtww::{system, link, Link};
+use libtww::{system, link, Link, Addr};
 use libtww::link::inventory::Inventory;
 use libtww::link::item;
 use libtww::link::equips::Equips;
 use libtww::link::quest_items::Sword;
+use libtww::game::windfall_flowers::WindfallFlowers;
 use libtww::game::{Console, controller, flag};
 use libtww::warping::{Entrance, Warp, stage};
+use libtww::system::memory::{read, write};
 
 #[no_mangle]
 #[inline(never)]
@@ -19,7 +21,10 @@ pub extern "C" fn init() {
     // Call overriden instruction
     system::cdyl_init_async();
 
-    Console::get().setup();
+    let console = Console::get();
+    console.setup();
+    console.x = 5;
+    console.y = 16;
 }
 
 pub static mut hasSword : bool = true;
@@ -39,6 +44,9 @@ pub extern "C" fn game_loop() {
 
     if exit.entrance.stage_name() == stage::sea::SEA && Entrance::last_entrance().stage_name() == stage::other::NAME_SELECT && !flag::HAS_SEEN_INTRO.is_active()
     {
+        link.heart_pieces = 40;
+        link.heart_quarters = 40;
+
         link.set_sword(Sword::HerosSword);
         let warp = Warp::new(stage::earth_temple::TEMPLE, 1, 1, exit.layer_override, exit.fadeout, exit.enabled);
         warp.execute();
@@ -111,6 +119,22 @@ pub extern "C" fn game_loop() {
         inventory.bombs_slot = item::BOMBS;
         inventory.tingle_tuner_slot = item::TINGLE_TUNER;
     }
+    else if Entrance::last_entrance().stage_name() == stage::cavern::PAWPRINT_ISLE_WIZZROBE
+    {
+        let _ = write!(lines[0].begin(), "- You Don't Need a Bow For This -");
+        Link::set_collision(link::CollisionType::ChestStorage);
+        link.set_sword(Sword::UnchargedMasterSword);
+        inventory.deku_leaf_slot = item::DEKU_LEAF;
+        link.magic = 16;
+        link.max_magic = 16;
+
+        let wizzrobe_memory = read::<u8>(0x803B88B7);
+        if wizzrobe_memory == 0x3F
+        {
+            let warp = Warp::new(stage::dragon_roost_island::POND, 1, 0, exit.layer_override, exit.fadeout, true);
+            warp.execute();
+        }
+    }
     else if Entrance::last_entrance().stage_name() == stage::dragon_roost_island::POND
     {
         let _ = write!(lines[0].begin(), "- X Controls The Items -");
@@ -135,6 +159,17 @@ pub extern "C" fn game_loop() {
             Inventory::set_by_slot_id(unsafe{adjusted_index} as usize, item::EMPTY);
             Inventory::set_by_slot_id(new_adjusted_index as usize, item_id_for_slot(new_adjusted_index));
             unsafe{adjusted_index = new_adjusted_index;}
+        }
+    }
+    else if Entrance::last_entrance().stage_name() == stage::sea::SEA && Entrance::last_entrance().room == 11
+    {
+        let _ = write!(lines[0].begin(), "- 100 Rupees -");
+        write::<u8>(0x803B8888, 0x80); //set windfall intro cs to seen
+        set_rupees_from_flowers();
+        if link.rupees == 100
+        {
+            let warp = Warp::new(stage::other::ENDING, 0, 0, exit.layer_override, exit.fadeout, true);
+            warp.execute();
         }
     }
     else 
@@ -192,8 +227,6 @@ pub fn item_id_for_slot(index: u8) -> u8 {
 }
 
 pub fn mask_all_buttons(mask: u16) {
-    use libtww::system::memory::{read, write};
-
     let m1: u16 = read(0x803E0D2A);
     let m2: u16 = read(0x803E0D2E);
     let m3: u16 = read(0x803E0CF8);
@@ -203,6 +236,100 @@ pub fn mask_all_buttons(mask: u16) {
     write(0x803E0D2E, m2 & mask);
     write(0x803E0CF8, m3 & mask);
     write(0x803E0D42, m4 & mask);
+}
+
+pub fn reset_flowers() {
+    let flowers = WindfallFlowers::get();
+    flowers.shop_left = 0;
+    flowers.bench_bush = 0;
+    flowers.bench_tree = 0;
+    flowers.bench_stone = 0;
+    flowers.platform_right = 0;
+    flowers.shop_right = 0;
+    flowers.platform_left = 0;
+    flowers.alley_tree = 0;
+    flowers.gate_center_left = 0;
+    flowers.gate_left_left = 0;
+    flowers.gate_left_right = 0;
+    flowers.gate_center_right = 0;
+    flowers.gate_right_right = 0;
+    flowers.gate_right_left = 0;
+
+    let inventory = Inventory::get();
+    for x in 0..8 {
+        inventory.delivery_bag.items[x] = item::TOWN_FLOWER;
+    }
+}
+
+pub fn set_rupees_from_flowers() {
+    let flowers = WindfallFlowers::get();
+    let mut rupee_count = 0;
+    if flowers.bench_bush > 0
+    {
+        rupee_count += 2;
+    }
+    if flowers.bench_stone > 0
+    {
+        rupee_count += 3;
+    }
+    if flowers.bench_tree > 0
+    {
+        rupee_count += 5;
+    }
+    if flowers.shop_left > 0
+    {
+        rupee_count += 7;
+    }
+    if flowers.shop_right > 0
+    {
+        rupee_count += 11;
+    }
+    if flowers.platform_left > 0
+    {
+        rupee_count += 13;
+    }
+    if flowers.platform_right > 0
+    {
+        rupee_count += 17;
+    }
+    if flowers.alley_tree > 0
+    {
+        rupee_count += 19;
+    }
+    if flowers.gate_right_right > 0
+    {
+        rupee_count += 23;
+    }
+    if flowers.gate_right_left > 0
+    {
+        rupee_count += 29;
+    }
+    if flowers.gate_center_right > 0
+    {
+        rupee_count += 31;
+    }
+    if flowers.gate_center_left > 0
+    {
+        rupee_count += 37;
+    }
+    if flowers.gate_left_right > 0
+    {
+        rupee_count += 41;
+    }
+    if flowers.gate_left_left > 0
+    {
+        rupee_count += 43;
+    }
+    set_rupees(rupee_count);
+}
+
+pub fn set_rupees(rupees: u16) 
+{
+    let link = Link::get();
+    let address = unsafe {rupees_left_addr};
+    let previous_rupees_left = read::<i32>(address);
+    write(address, previous_rupees_left + rupees as i32 - link.rupees as i32);
+    link.rupees = rupees;
 }
 
 #[no_mangle]
@@ -216,24 +343,26 @@ pub extern "C" fn set_control_stuff() {
     //replace warps
     let inventory = Inventory::get();
     let exit = Warp::last_exit();
-    if exit.entrance.stage_name() == stage::forsaken_fortress::FF1
+    let stage_name = exit.entrance.stage_name();
+    if stage_name == stage::forsaken_fortress::FF1
     {
         let warp = Warp::new(stage::forbidden_woods::BOSS, 0, 0, exit.layer_override, exit.fadeout, true);
         warp.execute();
     }
-    else if exit.entrance.stage_name() == stage::forest_haven::FOREST_HAVEN
+    else if stage_name == stage::forest_haven::FOREST_HAVEN
     {
         inventory.bomb_count = 45;
         inventory.bomb_capacity = 99;
         let warp = Warp::new(stage::outset::UNDER_LINKS_HOUSE, 0, 0, exit.layer_override, exit.fadeout, true);
         warp.execute();
     }
-    else if exit.entrance.stage_name() == stage::sea::SEA && Entrance::last_entrance().stage_name() == stage::outset::UNDER_LINKS_HOUSE
+    else if stage_name == stage::sea::SEA && Entrance::last_entrance().stage_name() == stage::outset::UNDER_LINKS_HOUSE
     {
         if inventory.bomb_count == 42
         {
             inventory.bombs_slot = item::EMPTY;
-            let warp = Warp::new(stage::dragon_roost_island::POND, 1, 0, exit.layer_override, exit.fadeout, true);
+            inventory.tingle_tuner_slot = item::EMPTY;
+            let warp = Warp::new(stage::cavern::PAWPRINT_ISLE_WIZZROBE, 0, 0, exit.layer_override, exit.fadeout, exit.enabled);
             warp.execute();
         }
         else 
@@ -243,11 +372,97 @@ pub extern "C" fn set_control_stuff() {
             warp.execute();
         }
     }
-    else if exit.entrance.stage_name() == stage::dragon_roost_island::POSTAL_SERVICE
+    else if stage_name == stage::dragon_roost_island::POSTAL_SERVICE
     {
-        let warp = Warp::new(stage::dragon_roost_island::POND, 1, 0, exit.layer_override, exit.fadeout, true);
+        if exit.entrance.entrance == 3
+        {
+            let warp = Warp::new(stage::dragon_roost_island::POND, 1, 0, exit.layer_override, exit.fadeout, true);
+            warp.execute();
+        }
+        else 
+        {
+            let warp = Warp::new(stage::dragon_roost_island::POND, 0, 0, exit.layer_override, exit.fadeout, true);
+            warp.execute();
+        }
+    }
+    else if stage_name == stage::dragon_roost_cavern::DUNGEON
+    {
+        for x in 0..19 {
+            Inventory::set_by_slot_id(x, item::EMPTY);
+        }
+
+        inventory.delivery_bag_slot = item::DELIVERY_BAG;
+        reset_flowers();
+        WindfallFlowers::activate_pedestals();
+
+        let warp = Warp::new(stage::sea::SEA, 0, 11, 6, exit.fadeout, true);
         warp.execute();
     }
+    else 
+    {
+        let mut entrance_num = 0;
+        if stage_name == stage::windfall::BOMB_SHOP
+        {
+            entrance_num = 1;
+        }
+        else if exit.entrance.stage_name() == stage::windfall::HOUSE_OF_WEALTH
+        {
+            if exit.entrance.entrance == 0
+            {
+                entrance_num = 3;
+            }
+            else 
+            {
+                entrance_num = 4;
+            }
+        }
+        else if exit.entrance.stage_name() == stage::windfall::CAFE_BAR
+        {
+            entrance_num = 6;
+        }
+        else if exit.entrance.stage_name() == stage::windfall::CHU_JELLY_JUICE_SHOP
+        {
+            entrance_num = 7;
+        }
+        else if exit.entrance.stage_name() == stage::windfall::GAME_ROOM
+        {
+            if exit.entrance.entrance == 1
+            {
+                entrance_num = 8;
+            }
+            else 
+            {
+                entrance_num = 9;
+            }
+        }
+        else if exit.entrance.stage_name() == stage::windfall::LENZOS_HOUSE
+        {
+            entrance_num = 10;
+        }
+        else if exit.entrance.stage_name() == stage::windfall::SCHOOL_OF_JOY
+        {
+            entrance_num = 12;
+        }
+        else if exit.entrance.stage_name() == stage::windfall::JAIL
+        {
+            entrance_num = 13;
+        }
+        if entrance_num > 0
+        {
+            reset_flowers();
+            let warp = Warp::new(stage::sea::SEA, entrance_num, 11, 6, exit.fadeout, true);
+            warp.execute();
+        }
+    }
+}
+
+pub static mut rupees_left_addr: Addr = 0;
+
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn init_rupees(addr: Addr) {
+    unsafe {rupees_left_addr = addr + 0x2FFC;}
+    system::dmeter_rupy_init(addr);
 }
 
 #[no_mangle]
@@ -255,4 +470,5 @@ pub extern "C" fn start() {
     game_loop();
     init();
     set_control_stuff();
+    init_rupees(0);
 }
