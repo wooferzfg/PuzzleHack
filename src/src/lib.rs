@@ -41,6 +41,7 @@ pub extern "C" fn game_loop() {
     let mut lines = &mut console.lines;
 
     let exit = Warp::last_exit();
+    let stage_name = Entrance::last_entrance().stage_name();
 
     if exit.entrance.stage_name() == stage::sea::SEA && Entrance::last_entrance().stage_name() == stage::other::NAME_SELECT && !flag::HAS_SEEN_INTRO.is_active()
     {
@@ -57,7 +58,7 @@ pub extern "C" fn game_loop() {
         let warp = Warp::new(stage::dev::LARGE_EMPTY_ROOM, 0, 0, exit.layer_override, exit.fadeout, true);
         warp.execute();
     }
-    else if Entrance::last_entrance().stage_name() == stage::earth_temple::TEMPLE && exit.entrance.room == Entrance::last_entrance().room
+    else if stage_name == stage::earth_temple::TEMPLE && exit.entrance.room == Entrance::last_entrance().room
     {
         if unsafe {hasSword}
         {
@@ -78,17 +79,17 @@ pub extern "C" fn game_loop() {
             warp.execute();
         }
     }
-    else if Entrance::last_entrance().stage_name() == stage::forsaken_fortress::FF1_INTERIOR
+    else if stage_name == stage::forsaken_fortress::FF1_INTERIOR
     {
         if !flag::GRABBED_FIRST_ROPE_IN_FF1.is_active()
         {
             let _ = write!(lines[0].begin(), "- On the Ropes Without That Button -");
-            link.heart_quarters = 12;
+            link.heart_quarters = 40;
             Link::set_collision(link::CollisionType::DoorCancel);
         }
         else
         {
-            if link.heart_quarters < 12
+            if link.heart_quarters < 40
             {
                 let _ = write!(lines[0].begin(), "- Fuck Doors, Get Paid -");
                 Link::set_collision(link::CollisionType::ChestStorage);
@@ -100,7 +101,7 @@ pub extern "C" fn game_loop() {
             }
         }
     }
-    else if Entrance::last_entrance().stage_name() == stage::forbidden_woods::BOSS
+    else if stage_name == stage::forbidden_woods::BOSS
     {
         let _ = write!(lines[0].begin(), "- Unconventional Methods -");
         Link::set_collision(link::CollisionType::ChestStorage);
@@ -109,19 +110,25 @@ pub extern "C" fn game_loop() {
         link.max_magic = 16;
         link.set_sword(Sword::UnchargedMasterSword);
     }
-    else if Entrance::last_entrance().stage_name() == stage::outset::UNDER_LINKS_HOUSE
+    else if stage_name == stage::outset::UNDER_LINKS_HOUSE
     {
         let _ = write!(lines[0].begin(), "- Bombs = The Answer to Life -");
+
         link.set_sword(Sword::None);
         inventory.deku_leaf_slot = item::EMPTY;
+
         link.magic = 0;
         link.max_magic = 0;
         inventory.bombs_slot = item::BOMBS;
         inventory.tingle_tuner_slot = item::TINGLE_TUNER;
     }
-    else if Entrance::last_entrance().stage_name() == stage::cavern::PAWPRINT_ISLE_WIZZROBE
+    else if stage_name == stage::cavern::PAWPRINT_ISLE_WIZZROBE
     {
         let _ = write!(lines[0].begin(), "- You Don't Need a Bow For This -");
+
+        inventory.bombs_slot = item::EMPTY;
+        inventory.tingle_tuner_slot = item::EMPTY;
+
         Link::set_collision(link::CollisionType::ChestStorage);
         link.set_sword(Sword::UnchargedMasterSword);
         inventory.deku_leaf_slot = item::DEKU_LEAF;
@@ -131,14 +138,19 @@ pub extern "C" fn game_loop() {
         let wizzrobe_memory = read::<u8>(0x803B88B7);
         if wizzrobe_memory == 0x3F
         {
+            inventory.deku_leaf_slot = item::EMPTY;
             let warp = Warp::new(stage::dragon_roost_island::POND, 1, 0, exit.layer_override, exit.fadeout, true);
             warp.execute();
         }
     }
-    else if Entrance::last_entrance().stage_name() == stage::dragon_roost_island::POND
+    else if stage_name == stage::dragon_roost_island::POND
     {
         let _ = write!(lines[0].begin(), "- X Controls The Items -");
         
+        link.set_sword(Sword::None);
+        link.magic = 0;
+        link.max_magic = 0;
+
         link.magic = 16;
         link.max_magic = 16;
         inventory.bomb_count = 99;
@@ -161,9 +173,15 @@ pub extern "C" fn game_loop() {
             unsafe{adjusted_index = new_adjusted_index;}
         }
     }
-    else if Entrance::last_entrance().stage_name() == stage::sea::SEA && Entrance::last_entrance().room == 11
+    else if stage_name == stage::sea::SEA && Entrance::last_entrance().room == 11 && exit.entrance.stage_name() != stage::other::ENDING
     {
         let _ = write!(lines[0].begin(), "- 100 Rupees -");
+
+        for x in 0..19 {
+            Inventory::set_by_slot_id(x, item::EMPTY);
+        }
+        WindfallFlowers::activate_pedestals();
+        inventory.delivery_bag_slot = item::DELIVERY_BAG;
         write::<u8>(0x803B8888, 0x80); //set windfall intro cs to seen
         set_rupees_from_flowers();
         if link.rupees == 100
@@ -360,8 +378,6 @@ pub extern "C" fn set_control_stuff() {
     {
         if inventory.bomb_count == 42
         {
-            inventory.bombs_slot = item::EMPTY;
-            inventory.tingle_tuner_slot = item::EMPTY;
             let warp = Warp::new(stage::cavern::PAWPRINT_ISLE_WIZZROBE, 0, 0, exit.layer_override, exit.fadeout, exit.enabled);
             warp.execute();
         }
@@ -387,14 +403,7 @@ pub extern "C" fn set_control_stuff() {
     }
     else if stage_name == stage::dragon_roost_cavern::DUNGEON
     {
-        for x in 0..19 {
-            Inventory::set_by_slot_id(x, item::EMPTY);
-        }
-
-        inventory.delivery_bag_slot = item::DELIVERY_BAG;
         reset_flowers();
-        WindfallFlowers::activate_pedestals();
-
         let warp = Warp::new(stage::sea::SEA, 0, 11, 6, exit.fadeout, true);
         warp.execute();
     }
