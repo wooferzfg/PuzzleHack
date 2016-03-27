@@ -388,6 +388,11 @@ pub extern "C" fn set_control_stuff() {
             warp.execute();
         }
     }
+    else if stage_name == stage::sea::SEA && exit.entrance.room == 12
+    {
+        let warp = Warp::new(stage::cavern::PAWPRINT_ISLE_WIZZROBE, 0, 0, exit.layer_override, exit.fadeout, exit.enabled);
+        warp.execute();
+    }
     else if stage_name == stage::dragon_roost_island::POSTAL_SERVICE
     {
         if exit.entrance.entrance == 3
